@@ -8,6 +8,7 @@ var R = parseInt(inputs[0]); // number of rows.
 var C = parseInt(inputs[1]); // number of columns.
 var A = parseInt(inputs[2]); // number of rounds between the time the alarm countdown is activated and the time the alarm goes off.
 
+printErr("init", R, C);
 var targetVal = "C";
 
 class Graph {
@@ -20,8 +21,8 @@ class Graph {
         this.cols = cols;
         this.rows = rows;
 
-        for(let x = 0; x < rows; x++) {
-            for(let y = 0; y < cols; y++) {
+        for(let x = 0; x < cols; x++) {
+            for(let y = 0; y < rows; y++) {
                 let node = new Node(x,y, Infinity, Infinity);
                 this.nodes.set(node.getId(), node);
             }
@@ -54,11 +55,12 @@ class Graph {
             if (!this.closedSet.has(neighbour) && neighbour.val !== "#") {
                 let tentativeGScore = node.gScore + 1;
                 if (!this.openSet.has(neighbour)) {
-                    openSet.add(neighbour);
-                } else if (tentativeGScore < neighbour.gScore) {
+                    this.openSet.add(neighbour);
+                }
+                if (tentativeGScore < neighbour.gScore) {
                     neighbour.parent = node;
                     neighbour.gScore = tentativeGScore;
-                    neighbour.fScore = neighbour.gScore + _calculateHeuristic(neighbour);
+                    neighbour.fScore = neighbour.gScore + this._calculateHeuristic(neighbour);
                 }
             }
         }
@@ -100,16 +102,28 @@ class Graph {
         return this.nodes.get(Node.generateId(x, y));
     }
 
-    getLowestNodeWithLowestDefinedFScore() {
+    getLowestNodeWithLowestDefinedFScore(ignoreNode) {
         let minNode = null;
         for(let node of this.nodes.values()) {
-            if (node.fScore) {
+            if (node.fScore && node.fScore !== Infinity && node !== ignoreNode) {
                 if (!minNode || minNode.fScore < node.fScore) {
                     minNode = node;
                 }
             }
         }
         return minNode;
+    }
+
+    print() {
+        printErr("-------------Printing graph-----------------------")
+        for(let x = 0; x < this.cols; x++) {
+            let row = "";
+            for(let y = 0; y < this.rows; y++) {
+                let node = this.getNode(x,y);
+                row += node.val;
+            }
+            printErr(row);
+        }
     }
 }
 
@@ -120,7 +134,7 @@ class Node {
         this.gScore = gScore;
         this.fScore = fScore;
         this.parent = null;
-        this.val = "#";
+        this.val = "?";
     }
 
     static generateId(x, y) {
@@ -133,14 +147,13 @@ class Node {
 }
 
 function getNextMove(targetNode, startNode) {
-    printErr("Next?", targetNode, startNode);
     while (targetNode.parent !== startNode) {
         targetNode = targetNode.parent;
     }
-    if (currNode.x !== targetNode.x) {
-        return currNode.x > targetNode.x ? "LEFT" : "RIGHT";
+    if (startNode.x !== targetNode.x) {
+        return startNode.x > targetNode.x ? "LEFT" : "RIGHT";
     }
-    return currNode.y > targetNode.y ? "UP" : "DOWN";
+    return startNode.y > targetNode.y ? "UP" : "DOWN";
 }
 
 // game loop
@@ -157,10 +170,10 @@ while (true) {
         });
     }
 
+    printErr(graph.print());
     let nextMove = null;
     while (graph.openSet.size && !nextMove) {
         let currNode = graph.getNextOpenNode();
-        printErr("currNode", currNode);
         if (currNode.val === targetVal) {
             nextMove = getNextMove(currNode, graph.getNode(startX, startY));
         }
@@ -171,7 +184,7 @@ while (true) {
         print(nextMove);
     }
 
-    print(getNextMove(graph.getLowestNodeWithLowestDefinedFScore(), graph.getNode(startX, startY)));
+    print(getNextMove(graph.getLowestNodeWithLowestDefinedFScore(graph.getNode(startX, startY)), graph.getNode(startX, startY)));
 
 
 }
