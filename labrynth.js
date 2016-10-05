@@ -8,16 +8,13 @@ var R = parseInt(inputs[0]); // number of rows.
 var C = parseInt(inputs[1]); // number of columns.
 var A = parseInt(inputs[2]); // number of rounds between the time the alarm countdown is activated and the time the alarm goes off.
 
-printErr("init", R, C);
-var targetVal = "C";
+var foundControlRoom = false;
 
 class Graph {
     constructor(startX, startY, cols, rows) {
         this.closedSet = new Set();
         this.openSet = new Set();
         this.nodes = new Map();
-        this.gScores = new Map();
-        this.fScores = new Map();
         this.cols = cols;
         this.rows = rows;
 
@@ -28,99 +25,55 @@ class Graph {
             }
         }
 
-        let startNode = this.nodes.get(Node.generateId(startX, startY));
-        this.openSet.add(startNode);
-        startNode.gScore = 0 ;
-        startNode.fScore = this._calculateHeuristic(startNode);
+        this.startNode = this.nodes.get(Node.generateId(startX, startY));
     }
 
-    visit(node) {
-        this.openSet.delete(node);
-        this.closedSet.add(node);
-        let neighboursToVisit = new Set();
-        if (node.x - 1 >= 0) {
-            neighboursToVisit.add(this.getNode(node.x - 1, node.y));
-        }
-        if (node.x + 1 < C) {
-            neighboursToVisit.add(this.getNode(node.x + 1, node.y));
-        }
-        if (node.y - 1 >= 0) {
-            neighboursToVisit.add(this.getNode(node.x, node.y - 1));
-        }
-        if (node.y + 1 < R) {
-            neighboursToVisit.add(this.getNode(node.x, node.y + 1));
-        }
-
-        for (let neighbour of neighboursToVisit) {
-            if (!this.closedSet.has(neighbour) && neighbour.val !== "#") {
-                let tentativeGScore = node.gScore + 1;
-                if (!this.openSet.has(neighbour)) {
-                    this.openSet.add(neighbour);
-                }
-                if (tentativeGScore < neighbour.gScore) {
-                    neighbour.parent = node;
-                    neighbour.gScore = tentativeGScore;
-                    neighbour.fScore = neighbour.gScore + this._calculateHeuristic(neighbour);
-                }
-            }
-        }
-    }
-
-    //Use Manhattan distance if we know where the goal is. Otherwise assume that the goal is in the middle of the graph
-    _calculateHeuristic(node) {
-        let goal = this.findGoal();
-        if (goal) {
-            return Math.abs(node.x - goal.x) + Math.abs(node.y - goal.y);
-        }
-        return Math.abs(node.x - Math.floor(this.cols/2)) + Math.abs(node.y - Math.floor(this.rows/2));
-    }
-
-    findGoal() {
-        return (new Array(this.nodes.values())).find(elm => {
-            return elm.value === targetVal;
+    findGoal(targetVal) {
+        return (Array.from(this.nodes.values())).find(elm => {
+            return elm.val === targetVal;
         });
     }
 
     setValue(x, y, val) {
-        this.nodes.set(Node.generateId(), val);
-    }
-
-    getNextOpenNode() {
-        if (this.openSet.size === 0) {
-            return null;
-        }
-        let minNode = null;
-        for(let node of this.openSet) {
-            if (!minNode || minNode.fScore < node.fScore) {
-                minNode = node;
-            }
-        }
-        return minNode;
+        let node = this.nodes.get(Node.generateId(x, y));
+        node.val = val;
     }
 
     getNode(x, y) {
         return this.nodes.get(Node.generateId(x, y));
     }
 
-    getLowestNodeWithLowestDefinedFScore(ignoreNode) {
-        let minNode = null;
-        for(let node of this.nodes.values()) {
-            if (node.fScore && node.fScore !== Infinity && node !== ignoreNode) {
-                if (!minNode || minNode.fScore < node.fScore) {
-                    minNode = node;
-                }
-            }
+    getNeighboursToVisit(node) {
+        let neighboursToVisit = [];
+        if (node.x - 1 >= 0) {
+            neighboursToVisit.push(this.getNode(node.x - 1, node.y));
         }
-        return minNode;
+        if (node.x + 1 < C) {
+            neighboursToVisit.push(this.getNode(node.x + 1, node.y));
+        }
+        if (node.y - 1 >= 0) {
+            neighboursToVisit.push(this.getNode(node.x, node.y - 1));
+        }
+        if (node.y + 1 < R) {
+            neighboursToVisit.push(this.getNode(node.x, node.y + 1));
+        }
+        neighboursToVisit = neighboursToVisit.filter(node => {
+            return node.val !== "#";
+        });
+        return neighboursToVisit;
     }
 
-    print() {
+    print(currX, currY) {
         printErr("-------------Printing graph-----------------------")
-        for(let x = 0; x < this.cols; x++) {
+        for(let y = 0; y < this.rows; y++) {
             let row = "";
-            for(let y = 0; y < this.rows; y++) {
+            for(let x = 0; x < this.cols; x++) {
                 let node = this.getNode(x,y);
-                row += node.val;
+                if (node.x === currX && node.y === currY) {
+                    row += "X";   
+                } else {
+                    row += node.val;    
+                }
             }
             printErr(row);
         }
@@ -131,8 +84,6 @@ class Node {
     constructor(x, y, gScore, fScore) {
         this.x = x;
         this.y = y;
-        this.gScore = gScore;
-        this.fScore = fScore;
         this.parent = null;
         this.val = "?";
     }
@@ -146,14 +97,153 @@ class Node {
     }
 }
 
-function getNextMove(targetNode, startNode) {
-    while (targetNode.parent !== startNode) {
-        targetNode = targetNode.parent;
+class AStarSolver {
+    constructor(graph) {
+        this.graph = graph;
+        this.closedSet = new Set();
+        this.openSet = new Set();
+        this.gScores = new Map();
+        this.fScores = new Map();
+
+        for(let node of graph.nodes.values()) {
+            this.gScores.set(node.getId(), Infinity);
+            this.fScores.set(node.getId(), Infinity);
+        }
+
+        let startNode = graph.startNode;
+        this.openSet.add(startNode);
+        this.gScores.set(startNode.getId(), 0);
+        this.fScores.set(startNode.getId(), this._calculateHeuristic(startNode));
     }
-    if (startNode.x !== targetNode.x) {
-        return startNode.x > targetNode.x ? "LEFT" : "RIGHT";
+
+    getNextMove () {
+        let nextMove = null;
+        while (this.openSet.size && !nextMove) {
+            let currNode = this.getNextOpenNode();
+            if (currNode.val === "T") {
+                nextMove = getNextMoveInstruction(reconstructPath(currNode, this.graph.startNode), this.graph.startNode);
+            } else {
+                this.visit(currNode);
+            }
+        }
+
+        return nextMove;
     }
-    return startNode.y > targetNode.y ? "UP" : "DOWN";
+
+    getFScore(node) {
+        return this.fScores.get(node.getId());
+    }
+    
+    getGScore(node) {
+        return this.gScores.get(node.getId());
+    }
+
+    getNextOpenNode() {
+        if (this.openSet.size === 0) {
+            return null;
+        }
+        let minNode = null;
+        for(let node of this.openSet) {
+            if (!minNode || this.getFScore(minNode) < this.getFScore(node)) {
+                minNode = node;
+            }
+        }
+        return minNode;
+    }
+
+    visit(node) {
+        this.openSet.delete(node);
+        this.closedSet.add(node);
+        let neighboursToVisit = this.graph.getNeighboursToVisit(node);
+
+        for (let neighbour of neighboursToVisit) {
+            if (!this.closedSet.has(neighbour)) {
+                let tentativeGScore = this.getGScore(node) + 1;
+                if (!this.openSet.has(neighbour)) {
+                    this.openSet.add(neighbour);
+                }
+                if (tentativeGScore < this.getGScore(neighbour)) {
+                    neighbour.parent = node;
+                    this.gScores.set(neighbour.getId(), tentativeGScore);
+                    this.fScores.set(neighbour.getId(), node.gScore + this._calculateHeuristic(neighbour));
+                }
+            }
+        }
+    }
+
+        //Use Manhattan distance if we know where the goal is. Otherwise assume that the goal is in the middle of the graph
+    _calculateHeuristic(node) {
+        let goal = this.graph.findGoal("T");
+        if (goal) {
+            return Math.abs(node.x - goal.x) + Math.abs(node.y - goal.y);
+        }
+        return Math.abs(node.x - Math.floor(this.cols/2)) + Math.abs(node.y - Math.floor(this.rows/2));
+    }
+}
+
+class BFSSolver {
+    constructor(graph) {
+        this.graph = graph;
+        this.queue = [];
+        for (let node of graph.nodes.values()) {
+            node.parent = null;
+            node.distance = Infinity;
+            this.queue.push(node);
+        }
+        graph.startNode.distance = 0;
+    }
+
+    _removeNodeFromQueue() {
+        let minNode = this.queue.reduce((minNode, node) => {
+            return !minNode || minNode.distance > node.distance ? node : minNode;
+        }, null);
+
+        if (minNode) {
+            this.queue = this.queue.filter(node => {
+                return node !== minNode;
+            });
+        }
+        return minNode;
+    }
+
+    getNextMove() {
+        let nextMove = null;
+        while (this.queue.length > 0 && !nextMove) {
+            let currNode = this._removeNodeFromQueue();
+            if (currNode.val === "C" || currNode.val === "?") {
+                let nextNode = currNode;
+                while (nextNode.parent && nextNode.parent !== this.graph.startNode) {
+                    nextNode = nextNode.parent;
+                }
+                nextMove = getNextMoveInstruction(nextNode, this.graph.startNode);
+            } else if (currNode.val !== "#") {
+                for (let node of this.graph.getNeighboursToVisit(currNode)) {
+                    if (node.distance === Infinity || node.distance > currNode.distance + 1) {
+                        node.distance = currNode.distance + 1;
+                        node.parent = currNode;
+                    }
+                }
+            }
+        }
+        return nextMove;
+    }
+}
+
+function getNextMoveInstruction(nextNode, startNode) {
+    while (nextNode.parent && nextNode.parent !== startNode) {
+        nextNode = nextNode.parent;
+    }
+    if (startNode.x !== nextNode.x) {
+        return startNode.x > nextNode.x ? "LEFT" : "RIGHT";
+    }
+    return startNode.y > nextNode.y ? "UP" : "DOWN";
+}
+
+function reconstructPath(nextNode, startNode) {
+    while (nextNode.parent && nextNode.parent !== startNode) {
+        nextNode = nextNode.parent;
+    }
+    return nextNode
 }
 
 // game loop
@@ -165,26 +255,20 @@ while (true) {
     let graph = new Graph(startX, startY, C, R);
     for (var y = 0; y < R; y++) {
         var row = readline(); // C of the characters in '#.TC?' (i.e. one line of the ASCII maze).
-        row.split().forEach((ch, x) => {
+        row.split("").forEach((ch, x) => {
             graph.setValue(x, y, ch);
         });
     }
 
-    printErr(graph.print());
-    let nextMove = null;
-    while (graph.openSet.size && !nextMove) {
-        let currNode = graph.getNextOpenNode();
-        if (currNode.val === targetVal) {
-            nextMove = getNextMove(currNode, graph.getNode(startX, startY));
-        }
-        graph.visit(currNode);
+    if (graph.startNode.val === "C") {
+        foundControlRoom = true;
     }
 
-    if (nextMove) {
-        print(nextMove);
+    let solver = null;
+    if (!foundControlRoom) {
+        solver = new BFSSolver(graph);
+    } else {
+        solver = new AStarSolver(graph);
     }
-
-    print(getNextMove(graph.getLowestNodeWithLowestDefinedFScore(graph.getNode(startX, startY)), graph.getNode(startX, startY)));
-
-
+    print(solver.getNextMove());
 }
