@@ -70,9 +70,9 @@ class Graph {
             for(let x = 0; x < this.cols; x++) {
                 let node = this.getNode(x,y);
                 if (node.x === currX && node.y === currY) {
-                    row += "X";   
+                    row += "X";
                 } else {
-                    row += node.val;    
+                    row += node.val;
                 }
             }
             printErr(row);
@@ -108,12 +108,34 @@ class AStarSolver {
         for(let node of graph.nodes.values()) {
             this.gScores.set(node.getId(), Infinity);
             this.fScores.set(node.getId(), Infinity);
+            node.parent = null;
         }
 
         let startNode = graph.startNode;
         this.openSet.add(startNode);
         this.gScores.set(startNode.getId(), 0);
         this.fScores.set(startNode.getId(), this._calculateHeuristic(startNode));
+    }
+
+    getFScore(node) {
+        return this.fScores.get(node.getId());
+    }
+
+    getGScore(node) {
+        return this.gScores.get(node.getId());
+    }
+
+    getNextOpenNode() {
+        if (this.openSet.size === 0) {
+            return null;
+        }
+        let minNode = null;
+        for(let node of this.openSet) {
+            if (!minNode || this.getFScore(minNode) > this.getFScore(node)) {
+                minNode = node;
+            }
+        }
+        return minNode;
     }
 
     getNextMove () {
@@ -130,27 +152,6 @@ class AStarSolver {
         return nextMove;
     }
 
-    getFScore(node) {
-        return this.fScores.get(node.getId());
-    }
-    
-    getGScore(node) {
-        return this.gScores.get(node.getId());
-    }
-
-    getNextOpenNode() {
-        if (this.openSet.size === 0) {
-            return null;
-        }
-        let minNode = null;
-        for(let node of this.openSet) {
-            if (!minNode || this.getFScore(minNode) < this.getFScore(node)) {
-                minNode = node;
-            }
-        }
-        return minNode;
-    }
-
     visit(node) {
         this.openSet.delete(node);
         this.closedSet.add(node);
@@ -161,12 +162,13 @@ class AStarSolver {
                 let tentativeGScore = this.getGScore(node) + 1;
                 if (!this.openSet.has(neighbour)) {
                     this.openSet.add(neighbour);
+                } else if (tentativeGScore >= this.getGScore(neighbour)) {
+                    continue;
                 }
-                if (tentativeGScore < this.getGScore(neighbour)) {
-                    neighbour.parent = node;
-                    this.gScores.set(neighbour.getId(), tentativeGScore);
-                    this.fScores.set(neighbour.getId(), node.gScore + this._calculateHeuristic(neighbour));
-                }
+                neighbour.parent = node;
+                this.gScores.set(neighbour.getId(), tentativeGScore);
+                this.fScores.set(neighbour.getId(), tentativeGScore + this._calculateHeuristic(neighbour));
+
             }
         }
     }
@@ -184,13 +186,12 @@ class AStarSolver {
 class BFSSolver {
     constructor(graph) {
         this.graph = graph;
-        this.queue = [];
         for (let node of graph.nodes.values()) {
             node.parent = null;
             node.distance = Infinity;
-            this.queue.push(node);
         }
         graph.startNode.distance = 0;
+        this.queue = [graph.startNode];
     }
 
     _removeNodeFromQueue() {
@@ -209,7 +210,7 @@ class BFSSolver {
     getNextMove() {
         let nextMove = null;
         while (this.queue.length > 0 && !nextMove) {
-            let currNode = this._removeNodeFromQueue();
+            let currNode = this.queue.shift();
             if (currNode.val === "C" || currNode.val === "?") {
                 let nextNode = currNode;
                 while (nextNode.parent && nextNode.parent !== this.graph.startNode) {
@@ -218,9 +219,10 @@ class BFSSolver {
                 nextMove = getNextMoveInstruction(nextNode, this.graph.startNode);
             } else if (currNode.val !== "#") {
                 for (let node of this.graph.getNeighboursToVisit(currNode)) {
-                    if (node.distance === Infinity || node.distance > currNode.distance + 1) {
+                    if (node.distance === Infinity) {
                         node.distance = currNode.distance + 1;
                         node.parent = currNode;
+                        this.queue.push(node);
                     }
                 }
             }
