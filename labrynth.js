@@ -158,7 +158,7 @@ class AStarSolver {
         let neighboursToVisit = this.graph.getNeighboursToVisit(node);
 
         for (let neighbour of neighboursToVisit) {
-            if (!this.closedSet.has(neighbour)) {
+            if (!this.closedSet.has(neighbour) && neighbour.val !== "?") {
                 let tentativeGScore = this.getGScore(node) + 1;
                 if (!this.openSet.has(neighbour)) {
                     this.openSet.add(neighbour);
